@@ -109,5 +109,5 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ steps.image-names.outputs.hub }}
-          short-description: "Ultra-fast columnar log aggregation & observability engine with SIMD bitset filtering and Quantum Studio UI."
+          short-description: "Ultra-fast columnar log engine in pure Go. 1.2M+ logs/s, 85% ZSTD compression & Web Studio."
           readme-filepath: ./DOCKER_README.md
