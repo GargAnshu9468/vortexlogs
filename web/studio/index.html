@@ -801,12 +801,18 @@
       levelPills: document.querySelectorAll('.filter-pills .pill')
     };
 
+    // Histogram State
+    const BUCKETS = 30;
+    const histogram = new Array(BUCKETS).fill(0).map(() => ({ total: 0, error: 0, warn: 0, info: 0 }));
+
     // Apply Theme
     function setTheme(theme) {
       state.theme = theme;
       document.documentElement.setAttribute('data-theme', theme);
       localStorage.setItem('vl_theme', theme);
-      drawHistogram();
+      if (typeof drawHistogram === 'function') {
+        drawHistogram();
+      }
     }
     setTheme(state.theme);
 
@@ -961,9 +967,6 @@
     }
 
     // Histogram Management
-    const BUCKETS = 30;
-    let histogram = new Array(BUCKETS).fill(0).map(() => ({ total: 0, error: 0, warn: 0, info: 0 }));
-
     function updateHistogramBucket(log) {
       const last = histogram[BUCKETS - 1];
       last.total++;
