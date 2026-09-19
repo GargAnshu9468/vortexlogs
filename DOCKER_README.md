@@ -1,6 +1,10 @@
 # VortexLogs ⚡
 ### Next-Generation Ultra-Fast Columnar Log Engine in Pure Go
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/GargAnshu9468/vortexlogs/main/assets/vortexlogs-banner.png" alt="VortexLogs Banner" width="800"/>
+</p>
+
 VortexLogs is an ultra-high-performance columnar log aggregation and real-time observability engine written in 100% pure Go (zero CGO, zero Java, zero JVM).
 
 It solves the operational bloat and disk multiplication of legacy log platforms (Elasticsearch, Logstash, Loki, Promtail) by delivering a compact **11 MB container** that boots in **<10 milliseconds** and uses **<35 MB RAM**.
