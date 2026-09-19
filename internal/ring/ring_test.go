@@ -2,6 +2,7 @@ package ring
 
 import (
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -33,9 +34,13 @@ func TestRingBufferConcurrent(t *testing.T) {
 		}(p)
 	}
 
-	totalConsumed := 0
+	var totalConsumed atomic.Int64
 	done := make(chan struct{})
+	var consumerWg sync.WaitGroup
+	consumerWg.Add(1)
+
 	go func() {
+		defer consumerWg.Done()
 		for {
 			select {
 			case <-done:
@@ -44,11 +49,11 @@ func TestRingBufferConcurrent(t *testing.T) {
 					if _, err := rb.Poll(); err != nil {
 						return
 					}
-					totalConsumed++
+					totalConsumed.Add(1)
 				}
 			default:
 				if _, err := rb.Poll(); err == nil {
-					totalConsumed++
+					totalConsumed.Add(1)
 				} else {
 					time.Sleep(10 * time.Microsecond)
 				}
@@ -58,10 +63,10 @@ func TestRingBufferConcurrent(t *testing.T) {
 
 	wg.Wait()
 	close(done)
-	time.Sleep(50 * time.Millisecond)
+	consumerWg.Wait()
 
-	expected := producers * itemsPerProducer
-	if totalConsumed != expected {
-		t.Fatalf("expected %d consumed items, got %d", expected, totalConsumed)
+	expected := int64(producers * itemsPerProducer)
+	if totalConsumed.Load() != expected {
+		t.Fatalf("expected %d consumed items, got %d", expected, totalConsumed.Load())
 	}
 }

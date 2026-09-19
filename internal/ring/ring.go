@@ -22,7 +22,7 @@ type RingBuffer struct {
 	mask  uint64
 	cap   uint64
 	_pad3 [64]byte
-	slots []*storage.Entry
+	slots []atomic.Pointer[storage.Entry]
 }
 
 // NewRingBuffer allocates a power-of-two capacity ring buffer.
@@ -39,7 +39,7 @@ func NewRingBuffer(capacity uint64) *RingBuffer {
 	return &RingBuffer{
 		mask:  capPow2 - 1,
 		cap:   capPow2,
-		slots: make([]*storage.Entry, capPow2),
+		slots: make([]atomic.Pointer[storage.Entry], capPow2),
 	}
 }
 
@@ -55,7 +55,7 @@ func (r *RingBuffer) Offer(entry *storage.Entry) error {
 		}
 
 		if atomic.CompareAndSwapUint64(&r.head, head, head+1) {
-			r.slots[head&r.mask] = entry
+			r.slots[head&r.mask].Store(entry)
 			return nil
 		}
 	}
@@ -72,14 +72,14 @@ func (r *RingBuffer) Poll() (*storage.Entry, error) {
 			return nil, ErrRingEmpty
 		}
 
-		entry := r.slots[tail&r.mask]
+		entry := r.slots[tail&r.mask].Load()
 		if entry == nil {
 			// Producer claimed sequence but has not written the pointer yet
 			return nil, ErrRingEmpty
 		}
 
 		if atomic.CompareAndSwapUint64(&r.tail, tail, tail+1) {
-			r.slots[tail&r.mask] = nil // avoid GC retention
+			r.slots[tail&r.mask].Store(nil) // avoid GC retention
 			return entry, nil
 		}
 	}
