@@ -134,6 +134,16 @@ func (e *Engine) ingestWorker() {
 	for {
 		select {
 		case <-e.ctx.Done():
+			// Drain any remaining entries in the ring before sealing
+			for {
+				entry, err := e.ring.Poll()
+				if err != nil {
+					break
+				}
+				e.mu.Lock()
+				e.activeChunk.Append(entry)
+				e.mu.Unlock()
+			}
 			e.sealActiveChunk()
 			return
 		case <-ticker.C:
@@ -275,10 +285,24 @@ func (e *Engine) Stats() Stats {
 	}
 }
 
+// Flush drains all entries currently queued in the ring buffer into the active chunk and syncs WAL.
+func (e *Engine) Flush() error {
+	for {
+		entry, err := e.ring.Poll()
+		if err != nil {
+			break
+		}
+		e.mu.Lock()
+		e.activeChunk.Append(entry)
+		e.mu.Unlock()
+	}
+	return e.wal.Sync()
+}
+
 // Close gracefully closes the engine, flushes pending entries, and seals chunks.
 func (e *Engine) Close() error {
 	e.cancel()
 	e.wg.Wait()
-	e.wal.Sync()
+	_ = e.Flush()
 	return e.wal.Close()
 }

@@ -82,3 +82,62 @@ func TestEngineIngestAndQuery(t *testing.T) {
 		t.Fatalf("expected 1 hit for #42, got %d", resSub.TotalHits)
 	}
 }
+
+func TestEngineQueryNarrowWindow(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "vortexlogs_narrow_test_*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	eng, err := Open(tempDir)
+	if err != nil {
+		t.Fatalf("failed to open engine: %v", err)
+	}
+	defer eng.Close()
+
+	now := time.Now().UnixNano()
+	_ = eng.Ingest(&storage.Entry{
+		Timestamp: now,
+		Level:     storage.LevelInfo,
+		Service:   "test",
+		Message:   "instant log",
+	})
+
+	// 1. StartTime == EndTime (timeSpan == 0)
+	res, err := eng.Query(QueryRequest{
+		StartTime: now,
+		EndTime:   now,
+	})
+	if err != nil {
+		t.Fatalf("query failed on zero duration: %v", err)
+	}
+	if res == nil {
+		t.Fatalf("expected non-nil result")
+	}
+
+	// 2. StartTime > EndTime (negative timeSpan)
+	resNeg, err := eng.Query(QueryRequest{
+		StartTime: now + 1000,
+		EndTime:   now,
+	})
+	if err != nil {
+		t.Fatalf("query failed on inverted duration: %v", err)
+	}
+	if resNeg == nil {
+		t.Fatalf("expected non-nil result for inverted query")
+	}
+
+	// 3. Very narrow timeSpan (< 30 ns with 30 buckets)
+	resNarrow, err := eng.Query(QueryRequest{
+		StartTime:        now,
+		EndTime:          now + 5,
+		HistogramBuckets: 50,
+	})
+	if err != nil {
+		t.Fatalf("query failed on narrow window: %v", err)
+	}
+	if resNarrow == nil {
+		t.Fatalf("expected non-nil result for narrow query")
+	}
+}

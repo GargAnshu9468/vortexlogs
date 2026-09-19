@@ -40,6 +40,7 @@ type QueryResult struct {
 // Query executes a sub-millisecond search across active and sealed columnar chunks.
 func (e *Engine) Query(req QueryRequest) (*QueryResult, error) {
 	startTimer := time.Now()
+	_ = e.Flush()
 
 	if req.EndTime == 0 {
 		req.EndTime = time.Now().UnixNano()
@@ -52,6 +53,8 @@ func (e *Engine) Query(req QueryRequest) (*QueryResult, error) {
 	}
 	if req.HistogramBuckets <= 0 {
 		req.HistogramBuckets = 30
+	} else if req.HistogramBuckets > 300 {
+		req.HistogramBuckets = 300
 	}
 
 	e.mu.RLock()
@@ -68,6 +71,9 @@ func (e *Engine) Query(req QueryRequest) (*QueryResult, error) {
 		timeSpan = int64(time.Minute)
 	}
 	bucketWidth := timeSpan / int64(req.HistogramBuckets)
+	if bucketWidth <= 0 {
+		bucketWidth = 1
+	}
 	histogram := make([]HistogramBucket, req.HistogramBuckets)
 	for i := 0; i < req.HistogramBuckets; i++ {
 		histogram[i].Timestamp = req.StartTime + int64(i)*bucketWidth

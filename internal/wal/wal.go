@@ -99,9 +99,15 @@ func (w *WAL) Recover() ([]*storage.Entry, error) {
 
 	var entries []*storage.Entry
 	header := make([]byte, 8)
+	var lastValidOffset int64
 
 	for {
-		_, err := io.ReadFull(w.file, header)
+		curOffset, err := w.file.Seek(0, io.SeekCurrent)
+		if err != nil {
+			break
+		}
+
+		_, err = io.ReadFull(w.file, header)
 		if err == io.EOF || err == io.ErrUnexpectedEOF {
 			break
 		}
@@ -135,11 +141,15 @@ func (w *WAL) Recover() ([]*storage.Entry, error) {
 		}
 
 		entries = append(entries, entry)
+		lastValidOffset = curOffset + 8 + int64(length)
 	}
 
-	// Seek back to end for subsequent writes
-	if _, err := w.file.Seek(0, io.SeekEnd); err != nil {
-		return nil, fmt.Errorf("wal: seek end error: %w", err)
+	// Truncate any trailing corrupted or incomplete write from sudden power cuts/crash
+	if err := w.file.Truncate(lastValidOffset); err != nil {
+		return nil, fmt.Errorf("wal: truncate to last valid offset error: %w", err)
+	}
+	if _, err := w.file.Seek(lastValidOffset, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("wal: seek to last valid offset error: %w", err)
 	}
 
 	return entries, nil

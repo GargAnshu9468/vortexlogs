@@ -68,6 +68,9 @@ func main() {
 	defer cancel()
 
 	_ = syslogServer.Stop(shutdownCtx)
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		log.Printf("[WARN] HTTP server shutdown error: %v", err)
+	}
 	if err := eng.Close(); err != nil {
 		log.Printf("[ERROR] Engine close error: %v", err)
 	}

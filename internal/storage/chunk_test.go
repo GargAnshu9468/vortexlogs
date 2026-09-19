@@ -105,3 +105,52 @@ func TestChunkSealAndDecompress(t *testing.T) {
 		t.Fatalf("unexpected message content: %s", results[0].Message)
 	}
 }
+
+func TestChunkZeroMatchFilter(t *testing.T) {
+	chunk := NewChunk(3)
+	now := time.Now().UnixNano()
+
+	for i := 0; i < 50; i++ {
+		entry := &Entry{
+			ID:        uint64(i + 1),
+			Timestamp: now + int64(i*1000),
+			Level:     LevelInfo,
+			Service:   "api",
+			Message:   fmt.Sprintf("Log line %d", i),
+			Labels:    map[string]string{"env": "staging"},
+		}
+		_ = chunk.Append(entry)
+	}
+
+	// 1. Filter for a level that doesn't exist in the chunk (LevelFatal)
+	// MUST return 0 matches, NOT all matches!
+	fatalMatches := chunk.Matches(0, now+1000000, LevelFatal, nil)
+	if len(fatalMatches) != 0 {
+		t.Fatalf("expected 0 matches for non-existent level, got %d", len(fatalMatches))
+	}
+
+	// 2. Filter for a label that doesn't exist
+	labelMatches := chunk.Matches(0, now+1000000, LevelUnknown, map[string]string{"env": "non-existent"})
+	if len(labelMatches) != 0 {
+		t.Fatalf("expected 0 matches for non-existent label, got %d", len(labelMatches))
+	}
+}
+
+func TestEntryUnmarshalCorruptedData(t *testing.T) {
+	e := &Entry{}
+
+	// Short byte arrays
+	for i := 0; i < 27; i++ {
+		garbage := make([]byte, i)
+		if err := e.UnmarshalBinary(garbage); err == nil {
+			t.Errorf("expected error for %d-byte truncated payload, got nil", i)
+		}
+	}
+
+	// Corrupted lengths
+	corruptPayload := make([]byte, 50)
+	corruptPayload[17] = 255 // service length 255 exceeds 50
+	if err := e.UnmarshalBinary(corruptPayload); err == nil {
+		t.Errorf("expected error for corrupted service length, got nil")
+	}
+}

@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,6 +28,7 @@ type HTTPServer struct {
 	eng       *engine.Engine
 	staticFS  http.FileSystem
 	clientSeq uint64
+	server    *http.Server
 }
 
 // NewHTTPServer initializes a new HTTP ingestion and Web Studio server.
@@ -63,7 +65,7 @@ func (s *HTTPServer) ListenAndServe() error {
 		})
 	}
 
-	server := &http.Server{
+	s.server = &http.Server{
 		Addr:         s.addr,
 		Handler:      s.corsMiddleware(mux),
 		ReadTimeout:  15 * time.Second,
@@ -71,7 +73,15 @@ func (s *HTTPServer) ListenAndServe() error {
 	}
 
 	fmt.Printf("[VortexLogs] 🌌 Quantum Log Studio & HTTP Ingest running on http://%s\n", s.addr)
-	return server.ListenAndServe()
+	return s.server.ListenAndServe()
+}
+
+// Shutdown gracefully stops the HTTP server.
+func (s *HTTPServer) Shutdown(ctx context.Context) error {
+	if s.server != nil {
+		return s.server.Shutdown(ctx)
+	}
+	return nil
 }
 
 func (s *HTTPServer) corsMiddleware(next http.Handler) http.Handler {
@@ -157,39 +167,70 @@ func (s *HTTPServer) handleIngest(w http.ResponseWriter, r *http.Request) {
 
 // handleQuery handles time-range, label-filtered, and regex full-text queries.
 func (s *HTTPServer) handleQuery(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-
 	req := engine.QueryRequest{
-		SubstringFilter: q.Get("search"),
-		Limit:           100,
+		Limit: 100,
 	}
 
+	// 1. If POST with JSON body, unmarshal into req
+	if r.Method == http.MethodPost && r.Body != nil {
+		body, err := io.ReadAll(io.LimitReader(r.Body, 1024*1024))
+		if err == nil && len(bytes.TrimSpace(body)) > 0 {
+			var jsonReq struct {
+				StartTime       int64             `json:"start_time"`
+				EndTime         int64             `json:"end_time"`
+				Level           string            `json:"level"`
+				Labels          map[string]string `json:"labels"`
+				Search          string            `json:"search"`
+				Limit           int               `json:"limit"`
+				HistogramBuckets int              `json:"histogram_buckets"`
+			}
+			if err := json.Unmarshal(body, &jsonReq); err == nil {
+				req.StartTime = jsonReq.StartTime
+				req.EndTime = jsonReq.EndTime
+				if jsonReq.Level != "" {
+					req.Level = storage.ParseLevel(jsonReq.Level)
+				}
+				req.LabelSelectors = jsonReq.Labels
+				req.SubstringFilter = jsonReq.Search
+				if jsonReq.Limit > 0 {
+					req.Limit = jsonReq.Limit
+				}
+				req.HistogramBuckets = jsonReq.HistogramBuckets
+			}
+		}
+	}
+
+	// 2. Query URL params override or augment
+	q := r.URL.Query()
+	if search := q.Get("search"); search != "" {
+		req.SubstringFilter = search
+	}
 	if lvl := q.Get("level"); lvl != "" {
 		req.Level = storage.ParseLevel(lvl)
 	}
-
-	if srv := q.Get("service"); srv != "" {
-		if req.LabelSelectors == nil {
-			req.LabelSelectors = make(map[string]string)
-		}
-		req.LabelSelectors["service"] = srv
-	}
-
 	if limitStr := q.Get("limit"); limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
 			req.Limit = l
 		}
 	}
-
 	if startStr := q.Get("start"); startStr != "" {
 		if ts, err := strconv.ParseInt(startStr, 10, 64); err == nil {
 			req.StartTime = ts
 		}
 	}
-
 	if endStr := q.Get("end"); endStr != "" {
 		if ts, err := strconv.ParseInt(endStr, 10, 64); err == nil {
 			req.EndTime = ts
+		}
+	}
+
+	// Support any arbitrary query param as label filter (e.g. ?service=auth&env=prod)
+	for key, values := range q {
+		if key != "search" && key != "limit" && key != "level" && key != "start" && key != "end" && len(values) > 0 {
+			if req.LabelSelectors == nil {
+				req.LabelSelectors = make(map[string]string)
+			}
+			req.LabelSelectors[key] = values[0]
 		}
 	}
 
@@ -225,6 +266,7 @@ func (s *HTTPServer) handleTailWebSocket(w http.ResponseWriter, r *http.Request)
 	defer s.eng.Unsubscribe(clientID)
 
 	for entry := range logCh {
+		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 		if err := conn.WriteJSON(entry); err != nil {
 			break
 		}

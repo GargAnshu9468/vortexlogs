@@ -56,6 +56,27 @@ func ParseLevel(s string) Level {
 	}
 }
 
+// MarshalJSON serializes Level as a string ("INFO", "ERROR", etc.)
+func (l Level) MarshalJSON() ([]byte, error) {
+	return json.Marshal(l.String())
+}
+
+// UnmarshalJSON parses Level from either string ("INFO") or numeric integer.
+func (l *Level) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		*l = ParseLevel(s)
+		return nil
+	}
+	var n uint8
+	if err := json.Unmarshal(data, &n); err == nil {
+		*l = Level(n)
+		return nil
+	}
+	*l = LevelInfo
+	return nil
+}
+
 // Entry represents a high-performance log event in VortexLogs.
 type Entry struct {
 	ID        uint64            `json:"id"`
@@ -170,29 +191,46 @@ func (e *Entry) UnmarshalBinary(data []byte) error {
 	e.Message = string(data[offset : offset+msgLen])
 	offset += msgLen
 
+	if offset+2 > len(data) {
+		return fmt.Errorf("storage: corrupted label count offset")
+	}
 	labelCount := int(binary.LittleEndian.Uint16(data[offset : offset+2]))
 	offset += 2
 	e.Labels = make(map[string]string, labelCount)
 
 	for i := 0; i < labelCount; i++ {
+		if offset+2 > len(data) {
+			return fmt.Errorf("storage: corrupted label key length")
+		}
 		kLen := int(binary.LittleEndian.Uint16(data[offset : offset+2]))
 		offset += 2
+		if offset+kLen > len(data) {
+			return fmt.Errorf("storage: corrupted label key payload")
+		}
 		k := string(data[offset : offset+kLen])
 		offset += kLen
 
+		if offset+2 > len(data) {
+			return fmt.Errorf("storage: corrupted label value length")
+		}
 		vLen := int(binary.LittleEndian.Uint16(data[offset : offset+2]))
 		offset += 2
+		if offset+vLen > len(data) {
+			return fmt.Errorf("storage: corrupted label value payload")
+		}
 		v := string(data[offset : offset+vLen])
 		offset += vLen
 
 		e.Labels[k] = v
 	}
 
-	jsonLen := int(binary.LittleEndian.Uint32(data[offset : offset+4]))
-	offset += 4
-	if jsonLen > 0 && offset+jsonLen <= len(data) {
-		e.RawJSON = make([]byte, jsonLen)
-		copy(e.RawJSON, data[offset:offset+jsonLen])
+	if offset+4 <= len(data) {
+		jsonLen := int(binary.LittleEndian.Uint32(data[offset : offset+4]))
+		offset += 4
+		if jsonLen > 0 && offset+jsonLen <= len(data) {
+			e.RawJSON = make([]byte, jsonLen)
+			copy(e.RawJSON, data[offset:offset+jsonLen])
+		}
 	}
 
 	return nil

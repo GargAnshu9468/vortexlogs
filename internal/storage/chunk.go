@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 
@@ -200,8 +201,9 @@ func (c *Chunk) Matches(startTime, endTime int64, level Level, labelSelectors ma
 		return nil
 	}
 
-	// Start with full candidate bitmap if filters exist
+	// Start with candidate bitmap if filters exist
 	var candidateBits Bitset
+	hasFilter := false
 
 	// Filter by Level
 	if level != LevelUnknown {
@@ -210,6 +212,7 @@ func (c *Chunk) Matches(startTime, endTime int64, level Level, labelSelectors ma
 			return nil
 		}
 		candidateBits = *bs
+		hasFilter = true
 	}
 
 	// Filter by Label Selectors
@@ -219,8 +222,9 @@ func (c *Chunk) Matches(startTime, endTime int64, level Level, labelSelectors ma
 		if !ok {
 			return nil
 		}
-		if len(candidateBits) == 0 {
+		if !hasFilter {
 			candidateBits = *bs
+			hasFilter = true
 		} else {
 			candidateBits = candidateBits.And(*bs)
 		}
@@ -232,7 +236,7 @@ func (c *Chunk) Matches(startTime, endTime int64, level Level, labelSelectors ma
 		if ts < startTime || ts > endTime {
 			continue
 		}
-		if len(candidateBits) > 0 && !candidateBits.Test(i) {
+		if hasFilter && !candidateBits.Test(i) {
 			continue
 		}
 		matchingIndexes = append(matchingIndexes, i)
@@ -272,16 +276,24 @@ func (c *Chunk) FetchEntries(indexes []int, substringFilter string) []*Entry {
 
 		for i := 0; i < c.Count; i++ {
 			var msgLen uint32
-			binary.Read(reader, binary.LittleEndian, &msgLen)
+			if err := binary.Read(reader, binary.LittleEndian, &msgLen); err != nil {
+				break
+			}
 			msgBuf := make([]byte, msgLen)
-			reader.Read(msgBuf)
+			if _, err := io.ReadFull(reader, msgBuf); err != nil {
+				break
+			}
 			messages[i] = string(msgBuf)
 
 			var jsonLen uint32
-			binary.Read(reader, binary.LittleEndian, &jsonLen)
+			if err := binary.Read(reader, binary.LittleEndian, &jsonLen); err != nil {
+				break
+			}
 			if jsonLen > 0 {
 				jsonBuf := make([]byte, jsonLen)
-				reader.Read(jsonBuf)
+				if _, err := io.ReadFull(reader, jsonBuf); err != nil {
+					break
+				}
 				rawJSONs[i] = jsonBuf
 			}
 		}

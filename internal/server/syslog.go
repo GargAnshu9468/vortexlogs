@@ -206,9 +206,9 @@ func parseSyslog(raw string, source string) *storage.Entry {
 	// Inspect RFC 5424 format: <PRI>VERSION TIMESTAMP HOSTNAME APP-NAME PROCID MSGID SD MSG
 	// or RFC 3164 format: <PRI>TIMESTAMP HOSTNAME TAG: MSG
 	parts := strings.Fields(raw)
-	if len(parts) >= 2 {
-		// Attempt RFC 3164 parsing
-		if parsedTime, err := time.Parse("Jan 2 15:04:05", strings.Join(parts[0:3], " ")); err == nil && len(parts) >= 4 {
+	if len(parts) >= 4 {
+		// Attempt RFC 3164 parsing: e.g. "Oct 11 22:14:15 host tag: msg"
+		if parsedTime, err := time.Parse("Jan 2 15:04:05", strings.Join(parts[0:3], " ")); err == nil {
 			now := time.Now()
 			parsedTime = parsedTime.AddDate(now.Year(), 0, 0)
 			ts = parsedTime.UnixNano()
@@ -231,6 +231,15 @@ func parseSyslog(raw string, source string) *storage.Entry {
 			}
 			if len(parts) > 3 {
 				message = strings.Join(parts[3:], " ")
+			}
+		} else {
+			message = raw
+		}
+	} else if len(parts) > 0 {
+		if parsedRFC3339, err := time.Parse(time.RFC3339Nano, parts[0]); err == nil {
+			ts = parsedRFC3339.UnixNano()
+			if len(parts) > 1 {
+				message = strings.Join(parts[1:], " ")
 			}
 		} else {
 			message = raw
