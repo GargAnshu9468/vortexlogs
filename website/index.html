@@ -316,21 +316,41 @@
     .btn:hover {
       background: var(--bg-surface-hover);
       border-color: var(--border-bright);
+      color: var(--text-main) !important;
       transform: translateY(-1px);
     }
 
-    .btn-primary {
+    .btn-primary,
+    .btn.btn-primary {
       background: linear-gradient(135deg, var(--cyan-neon), #00b4d8);
-      color: #030712;
-      border: none;
+      color: #030712 !important;
+      border: 1px solid transparent;
       font-weight: 700;
       box-shadow: 0 0 16px var(--cyan-glow);
     }
 
-    .btn-primary:hover {
-      opacity: 0.92;
-      box-shadow: 0 0 24px rgba(0, 240, 255, 0.45);
-      color: #030712;
+    .btn-primary:hover,
+    .btn.btn-primary:hover {
+      background: linear-gradient(135deg, #38f8ff, #00c6eb) !important;
+      color: #030712 !important;
+      opacity: 1;
+      box-shadow: 0 0 24px rgba(0, 240, 255, 0.55);
+      transform: translateY(-1px);
+      border-color: transparent;
+    }
+
+    [data-theme="light"] .btn-primary,
+    [data-theme="light"] .btn.btn-primary {
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      color: #ffffff !important;
+      box-shadow: 0 0 14px rgba(2, 132, 199, 0.25);
+    }
+
+    [data-theme="light"] .btn-primary:hover,
+    [data-theme="light"] .btn.btn-primary:hover {
+      background: linear-gradient(135deg, #0369a1, #075985) !important;
+      color: #ffffff !important;
+      box-shadow: 0 0 20px rgba(2, 132, 199, 0.4);
     }
 
     .btn-icon {
@@ -636,6 +656,12 @@
       transition: all 0.15s;
     }
 
+    .sim-pill:hover {
+      color: var(--text-main);
+      border-color: var(--border-bright);
+      background: var(--bg-surface-hover);
+    }
+
     .sim-pill.active {
       background: rgba(0, 240, 255, 0.15);
       border-color: var(--cyan-neon);
@@ -884,6 +910,11 @@
       cursor: pointer;
       border-bottom: 2px solid transparent;
       transition: all 0.15s;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-main);
+      border-bottom-color: rgba(0, 240, 255, 0.4);
     }
 
     .tab-btn.active {
@@ -1192,7 +1223,7 @@
         <span class="gradient-text">Sub-Millisecond Bitset Observability.</span>
       </h1>
       <p class="lead">
-        VortexLogs replaces resource-hungry, fragmented log infrastructures with a single, high-performance columnar engine. Featuring lock-free ring buffers, roaring bitset indexing, and 85%+ ZSTD compression in a single 18MB static binary.
+        VortexLogs replaces resource-hungry, fragmented log infrastructures with a single, high-performance columnar engine. Featuring lock-free ring buffers, roaring bitset indexing, and 85%+ ZSTD compression in a single 11.3 MB static binary.
       </p>
 
       <div class="hero-cta-group">
@@ -1276,7 +1307,7 @@
           </div>
 
           <div class="sim-controls">
-            <button class="btn btn-primary" id="btnSimPause">Pause Stream</button>
+            <button class="btn btn-primary" id="btnSimPause">▶ Resume Stream</button>
             <button class="btn" id="btnSimBurst">⚡ Traffic Burst</button>
           </div>
         </div>
@@ -1651,6 +1682,7 @@
         <div class="footer-col">
           <h5>Ecosystem</h5>
           <ul>
+            <li><a href="https://github.com/GargAnshu9468/vortexkv" target="_blank">VortexKV</a></li>
             <li><a href="https://github.com/GargAnshu9468/vortexmq" target="_blank">VortexMQ</a></li>
             <li><a href="#">VortexEdge (Upcoming)</a></li>
             <li><a href="#">VortexDB (Upcoming)</a></li>
@@ -1776,9 +1808,9 @@
       });
     });
 
-    // Interactive Simulator State
+    // Interactive Simulator State (Paused by default for inspection)
     const simState = {
-      isPaused: false,
+      isPaused: true,
       activeLvl: 'ALL',
       search: '',
       logs: []
@@ -1806,7 +1838,7 @@
 
     btnSimPause.addEventListener('click', () => {
       simState.isPaused = !simState.isPaused;
-      btnSimPause.textContent = simState.isPaused ? "Resume Stream" : "Pause Stream";
+      btnSimPause.textContent = simState.isPaused ? "▶ Resume Stream" : "⏸ Pause Stream";
     });
 
     const mockSvcs = ['auth-gw', 'payment-api', 'cart-worker', 'db-proxy', 'k8s-ingress'];
