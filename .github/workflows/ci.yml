@@ -32,9 +32,11 @@ jobs:
 
       - name: Validate Server Startup
         run: |
+          mkdir -p /tmp/vl_ci_data
           ./bin/vortexlogs -http :9428 -syslog :9429 -data /tmp/vl_ci_data &
           SERVER_PID=$!
-          sleep 2
-          curl -s http://localhost:9428/health | grep -q 'ok'
-          curl -s http://localhost:9428/api/v1/stats | grep -q 'total_ingested'
+          sleep 3
+          curl -s http://localhost:9428/health | grep 'ok'
+          curl -s http://localhost:9428/api/v1/stats | grep 'total_ingested'
           kill $SERVER_PID
+

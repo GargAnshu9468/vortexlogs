@@ -1,20 +1,21 @@
-# Build stage
-FROM golang:1.24-alpine AS builder
+# Build stage with native compilation using build platform
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
 
 WORKDIR /app
-
-ENV GOTOOLCHAIN=auto
 
 RUN apk update && apk add --no-cache git ca-certificates tzdata
 
 COPY go.mod go.sum ./
-RUN go mod download || true
+RUN go mod download
 
 COPY . .
 
-# Build statically linked binaries without hardcoded GOARCH for multi-arch buildx support
-RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags="-s -w -extldflags '-static'" -o /vortexlogs ./cmd/vortexlogs
-RUN CGO_ENABLED=0 GOOS=linux go build -a -ldflags="-s -w -extldflags '-static'" -o /vortexlogs-cli ./cmd/vortexlogs-cli
+ARG TARGETOS
+ARG TARGETARCH
+
+# Statically link using Go native cross-compilation
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -ldflags="-s -w" -o /vortexlogs ./cmd/vortexlogs
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -ldflags="-s -w" -o /vortexlogs-cli ./cmd/vortexlogs-cli
 
 # Scratch runtime stage
 FROM scratch
@@ -32,4 +33,3 @@ EXPOSE 9428 9429/udp 9429/tcp
 
 ENTRYPOINT ["/vortexlogs"]
 CMD ["-http", ":9428", "-syslog", ":9429", "-data", "/data"]
-

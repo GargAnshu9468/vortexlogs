@@ -6,8 +6,8 @@ BINARY_CLI=bin/vortexlogs-cli
 build:
 	@mkdir -p bin
 	@echo "Building VortexLogs Server and CLI..."
-	go build -ldflags="-s -w" -o $(BINARY_SERVER) cmd/vortexlogs/main.go
-	go build -ldflags="-s -w" -o $(BINARY_CLI) cmd/vortexlogs-cli/main.go
+	go build -ldflags="-s -w" -o $(BINARY_SERVER) ./cmd/vortexlogs
+	go build -ldflags="-s -w" -o $(BINARY_CLI) ./cmd/vortexlogs-cli
 	@echo "Build complete! Server: $(BINARY_SERVER), CLI: $(BINARY_CLI)"
 
 run: build
