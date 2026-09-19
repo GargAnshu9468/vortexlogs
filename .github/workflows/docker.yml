@@ -1,0 +1,113 @@
+name: Publish Docker Image
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  docker:
+    name: Build & Push Container Image
+    runs-on: ubuntu-latest
+    env:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Prepare Image Names
+        id: image-names
+        run: |
+          GHCR_IMAGE="ghcr.io/$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
+          echo "ghcr=$GHCR_IMAGE" >> $GITHUB_OUTPUT
+          if [ -n "$DOCKERHUB_USERNAME" ]; then
+            HUB_USER=$(echo "$DOCKERHUB_USERNAME" | tr '[:upper:]' '[:lower:]')
+            echo "hub=${HUB_USER}/vortexlogs" >> $GITHUB_OUTPUT
+          else
+            echo "hub=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract Metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ steps.image-names.outputs.ghcr }}
+            ${{ steps.image-names.outputs.hub }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          labels: |
+            org.opencontainers.image.title=vortexlogs
+            org.opencontainers.image.description=Ultra-fast columnar log aggregation & observability engine with SIMD bitset filtering and Quantum Studio UI
+            org.opencontainers.image.url=https://github.com/GargAnshu9468/vortexlogs
+            org.opencontainers.image.source=https://github.com/GargAnshu9468/vortexlogs
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=1.0.0
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.documentation=https://github.com/GargAnshu9468/vortexlogs/wiki
+            com.docker.image.source.entrypoint=Dockerfile
+          annotations: |
+            org.opencontainers.image.title=vortexlogs
+            org.opencontainers.image.description=Ultra-fast columnar log aggregation & observability engine with SIMD bitset filtering and Quantum Studio UI
+            org.opencontainers.image.url=https://github.com/GargAnshu9468/vortexlogs
+            org.opencontainers.image.source=https://github.com/GargAnshu9468/vortexlogs
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=1.0.0
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.documentation=https://github.com/GargAnshu9468/vortexlogs/wiki
+            com.docker.image.source.entrypoint=Dockerfile
+
+      - name: Build and Push Multi-Arch Images
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: mode=max
+          sbom: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          build-args: |
+            VERSION=1.0.0
+            COMMIT=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Update Docker Hub Description & Overview
+        if: env.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_TOKEN != ''
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ steps.image-names.outputs.hub }}
+          short-description: "Ultra-fast columnar log aggregation & observability engine with SIMD bitset filtering and Quantum Studio UI."
+          readme-filepath: ./DOCKER_README.md

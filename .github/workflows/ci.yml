@@ -1,0 +1,41 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+          check-latest: true
+          cache: false
+
+      - name: Vet & Static Analysis
+        run: go vet ./...
+
+      - name: Run Unit Tests with Race Detector
+        run: go test -v -race ./...
+
+      - name: Build Binaries
+        run: make build
+
+      - name: Validate Server Startup
+        run: |
+          ./bin/vortexlogs -http :9428 -syslog :9429 -data /tmp/vl_ci_data &
+          SERVER_PID=$!
+          sleep 2
+          curl -s http://localhost:9428/health | grep -q 'ok'
+          curl -s http://localhost:9428/api/v1/stats | grep -q 'total_ingested'
+          kill $SERVER_PID

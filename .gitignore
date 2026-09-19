@@ -1,4 +1,5 @@
 # Binaries
+bin/
 vortexlogs
 vortexlogs-cli
 *.exe
@@ -7,14 +8,34 @@ vortexlogs-cli
 *.so
 *.dylib
 
+# Test and coverage artifacts
+*.test
+*.out
+coverage.html
+profile.pprof
+
+# Release distribution builds
+dist/
+
 # Data & WAL
 data/
 *.wal
 *.chunk
+*.log
 
-# Test artifacts & caches
-*.test
-*.out
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+*.crt
+
+# OS and IDE files
 .DS_Store
 .idea/
 .vscode/
+*.swp
+
+# Promotional drafts and articles
+docs/articles/
+

@@ -43,6 +43,10 @@ func (s *HTTPServer) ListenAndServe() error {
 	mux := http.NewServeMux()
 
 	// API routes
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"ok","engine":"vortexlogs"}`))
+	})
 	mux.HandleFunc("/api/v1/ingest", s.handleIngest)
 	mux.HandleFunc("/api/v1/query", s.handleQuery)
 	mux.HandleFunc("/api/v1/stats", s.handleStats)
