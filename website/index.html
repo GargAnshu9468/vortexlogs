@@ -610,6 +610,19 @@
       gap: 0.5rem;
     }
 
+    #btnSimBurst {
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    #btnSimBurst:active,
+    #btnSimBurst.bursting {
+      transform: scale(0.95);
+      background: rgba(245, 158, 11, 0.22) !important;
+      border-color: var(--amber-neon) !important;
+      color: var(--amber-neon) !important;
+      box-shadow: 0 0 18px rgba(245, 158, 11, 0.45);
+    }
+
     .sim-search-bar {
       padding: 0.65rem 1.25rem;
       background: var(--bg-surface);
@@ -1999,12 +2012,33 @@
 
     // Burst Button
     btnSimBurst.addEventListener('click', () => {
-      for (let i = 0; i < 30; i++) {
-        addSimLog(createMockLog());
+      btnSimBurst.classList.add('bursting');
+      for (let i = 0; i < 35; i++) {
+        const log = createMockLog();
+        simState.logs.push(log);
+        if (simState.logs.length > 500) simState.logs.shift();
+        updateSimHist(log);
+        if (testFilter(log)) {
+          appendSimRow(log);
+        }
       }
-      document.getElementById('simVelocity').textContent = '48,200 logs/s';
+      drawSimHistogram();
+      simStream.scrollTop = simStream.scrollHeight;
+
+      const vel = document.getElementById('simVelocity');
+      vel.textContent = '1,240,000 logs/s';
+      vel.style.color = '#ef4444';
+      vel.style.textShadow = '0 0 14px rgba(239, 68, 68, 0.7)';
+
+      const qTime = document.getElementById('simQueryTime');
+      qTime.textContent = '0.08 ms';
+
       setTimeout(() => {
-        document.getElementById('simVelocity').textContent = '12,500 logs/s';
+        vel.textContent = '12,500 logs/s';
+        vel.style.color = '';
+        vel.style.textShadow = '';
+        qTime.textContent = '0.14 ms';
+        btnSimBurst.classList.remove('bursting');
       }, 1500);
     });
 
