@@ -1,7 +1,7 @@
 # Binaries
 bin/
-vortexlogs
-vortexlogs-cli
+/vortexlogs
+/vortexlogs-cli
 *.exe
 *.exe~
 *.dll
