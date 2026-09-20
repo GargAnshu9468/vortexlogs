@@ -52,6 +52,8 @@ func (s *HTTPServer) ListenAndServe() error {
 	mux.HandleFunc("/api/v1/ingest", s.handleIngest)
 	mux.HandleFunc("/api/v1/query", s.handleQuery)
 	mux.HandleFunc("/api/v1/stats", s.handleStats)
+	mux.HandleFunc("/api/v1/tail", s.handleTailWebSocket)
+
 	// Favicon fallback
 	faviconSVG := []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><defs><linearGradient id="g" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#00f0ff"/><stop offset="50%" stop-color="#8b5cf6"/><stop offset="100%" stop-color="#ec4899"/></linearGradient><linearGradient id="b" x1="40" y1="0" x2="0" y2="40" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#00f0ff"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs><path d="M20 3C30.4934 3 39 10.6112 39 20C39 24.2 37.4 28.1 34.6 31L29.8 26.2C31.2 24.4 32 22.3 32 20C32 13.9249 26.6274 9 20 9C15.8 9 12.1 11.2 10.1 14.5L4.8 11.2C8 6.2 13.6 3 20 3Z" fill="url(#g)"/><path d="M20 37C9.5066 37 1 29.3888 1 20C1 15.8 2.6 11.9 5.4 9L10.2 13.8C8.8 15.6 8 17.7 8 20C8 26.0751 13.3726 31 20 31C24.2 31 27.9 28.8 29.9 25.5L35.2 28.8C32 33.8 26.4 37 20 37Z" fill="url(#g)"/><rect x="18" y="13" width="4" height="14" rx="2" fill="url(#b)"/><circle cx="20" cy="20" r="2.5" fill="#ffffff"/></svg>`)
 	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
@@ -271,10 +273,36 @@ func (s *HTTPServer) handleTailWebSocket(w http.ResponseWriter, r *http.Request)
 	logCh := s.eng.Subscribe(clientID, filter)
 	defer s.eng.Unsubscribe(clientID)
 
-	for entry := range logCh {
-		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-		if err := conn.WriteJSON(entry); err != nil {
-			break
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				break
+			}
+		}
+	}()
+
+	ticker := time.NewTicker(25 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-done:
+			return
+		case entry, ok := <-logCh:
+			if !ok {
+				return
+			}
+			_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			if err := conn.WriteJSON(entry); err != nil {
+				return
+			}
+		case <-ticker.C:
+			_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				return
+			}
 		}
 	}
 }
