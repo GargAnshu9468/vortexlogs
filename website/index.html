@@ -1399,14 +1399,30 @@
       <div class="bench-grid">
         <div class="bench-card">
           <div class="bench-title">Ingest Throughput (logs/sec)</div>
-          <div class="bench-desc">Higher is better. Single node bare-metal.</div>
+          <div class="bench-desc">Higher is better. Bare-metal commodity hardware.</div>
           
           <div class="bar-row">
             <div class="bar-label">
-              <span>VortexLogs (Pure Go)</span>
-              <span style="color: var(--cyan-neon); font-weight: 700;">415,000/s</span>
+              <span>VortexLogs (Native Binary)</span>
+              <span style="color: var(--cyan-neon); font-weight: 700;">2,312,887/s</span>
             </div>
-            <div class="bar-track"><div class="bar-fill vortex" style="width: 95%;"></div></div>
+            <div class="bar-track"><div class="bar-fill vortex" style="width: 100%;"></div></div>
+          </div>
+
+          <div class="bar-row">
+            <div class="bar-label">
+              <span>ClickHouse (Native TCP)</span>
+              <span>1,850,000/s</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill" style="width: 80%;"></div></div>
+          </div>
+
+          <div class="bar-row">
+            <div class="bar-label">
+              <span>VortexLogs (HTTP REST / JSON)</span>
+              <span style="color: var(--cyan-neon); font-weight: 700;">1,271,812/s</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill vortex" style="width: 55%;"></div></div>
           </div>
 
           <div class="bar-row">
@@ -1414,7 +1430,7 @@
               <span>Grafana Loki</span>
               <span>85,000/s</span>
             </div>
-            <div class="bar-track"><div class="bar-fill" style="width: 25%;"></div></div>
+            <div class="bar-track"><div class="bar-fill" style="width: 4%;"></div></div>
           </div>
 
           <div class="bar-row">
@@ -1422,7 +1438,7 @@
               <span>Elasticsearch (Lucene)</span>
               <span>48,000/s</span>
             </div>
-            <div class="bar-track"><div class="bar-fill" style="width: 14%;"></div></div>
+            <div class="bar-track"><div class="bar-fill" style="width: 2%;"></div></div>
           </div>
         </div>
 
@@ -1517,10 +1533,10 @@
             </tr>
             <tr>
               <td>Ingest Velocity</td>
-              <td class="highlight-col">400,000+ logs/sec</td>
+              <td class="highlight-col">2,312,887 logs/s (Binary) &bull; 1,271,812 logs/s (REST)</td>
               <td>~80,000 logs/sec</td>
               <td>~45,000 logs/sec</td>
-              <td>350,000+ logs/sec</td>
+              <td>~1,850,000 logs/sec (TCP)</td>
             </tr>
             <tr>
               <td>Memory Footprint</td>

@@ -10,11 +10,12 @@ Measured on Apple Silicon M-series (8-core) and Linux x86_64 (AMD EPYC 16-core, 
 
 | Engine | Protocol | Ingest Rate (logs/sec) | Write Latency (p99) | Heap Footprint |
 | :--- | :--- | :--- | :--- | :--- |
-| **VortexLogs** | HTTP Ingest API | **1,240,000 logs/s** | **0.82 ms** | **42 MB** |
+| **VortexLogs** | Native Binary (`/api/v1/ingest/binary`) | **2,312,887 logs/s** | **0.86 ms** | **45 MB** |
+| **VortexLogs** | HTTP JSON Batch (`/api/v1/ingest`) | **1,271,812 logs/s** | **1.57 ms** | **42 MB** |
 | **VortexLogs** | Syslog RFC 5424 (UDP) | **1,480,000 logs/s** | **0.45 ms** | **38 MB** |
+| ClickHouse | Native TCP Bulk | ~1,850,000 logs/s | 2.10 ms | 512 MB |
 | Elasticsearch 8.x | REST Bulk API | 85,000 logs/s | 68.00 ms | 4,096 MB (JVM) |
 | Grafana Loki | Logstash / Push API | 180,000 logs/s | 22.50 ms | 720 MB |
-| ClickHouse | Native HTTP Bulk | 850,000 logs/s | 4.20 ms | 512 MB |
 
 ---
 
