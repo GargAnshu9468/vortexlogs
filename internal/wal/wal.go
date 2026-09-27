@@ -1,6 +1,7 @@
 package wal
 
 import (
+	"bufio"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -23,11 +24,12 @@ const (
 
 // WAL manages append-only sequential durability logging.
 type WAL struct {
-	mu       sync.Mutex
-	file     *os.File
-	dir      string
-	filename string
-	table    *crc32.Table
+	mu        sync.Mutex
+	file      *os.File
+	bufWriter *bufio.Writer
+	dir       string
+	filename  string
+	table     *crc32.Table
 }
 
 // Open opens or creates a WAL in the specified directory.
@@ -43,10 +45,11 @@ func Open(dir string) (*WAL, error) {
 	}
 
 	return &WAL{
-		file:     file,
-		dir:      dir,
-		filename: filename,
-		table:    crc32.MakeTable(crc32.Castagnoli),
+		file:      file,
+		bufWriter: bufio.NewWriterSize(file, 256*1024), // 256KB buffer for ultra-fast group writes
+		dir:       dir,
+		filename:  filename,
+		table:     crc32.MakeTable(crc32.Castagnoli),
 	}, nil
 }
 
@@ -71,11 +74,15 @@ func (w *WAL) Append(entry *storage.Entry) error {
 	binary.LittleEndian.PutUint32(header[0:4], checksum)
 	binary.LittleEndian.PutUint32(header[4:8], uint32(len(data)))
 
-	if _, err := w.file.Write(header); err != nil {
+	if _, err := w.bufWriter.Write(header); err != nil {
 		return fmt.Errorf("wal: write header error: %w", err)
 	}
-	if _, err := w.file.Write(data); err != nil {
+	if _, err := w.bufWriter.Write(data); err != nil {
 		return fmt.Errorf("wal: write payload error: %w", err)
+	}
+
+	if w.bufWriter.Buffered() >= 128*1024 {
+		_ = w.bufWriter.Flush()
 	}
 
 	return nil
@@ -85,6 +92,11 @@ func (w *WAL) Append(entry *storage.Entry) error {
 func (w *WAL) Sync() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.bufWriter != nil {
+		if err := w.bufWriter.Flush(); err != nil {
+			return err
+		}
+	}
 	return w.file.Sync()
 }
 
@@ -92,6 +104,9 @@ func (w *WAL) Sync() error {
 func (w *WAL) Recover() ([]*storage.Entry, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.bufWriter != nil {
+		_ = w.bufWriter.Flush()
+	}
 
 	if _, err := w.file.Seek(0, io.SeekStart); err != nil {
 		return nil, fmt.Errorf("wal: seek start error: %w", err)
@@ -160,11 +175,17 @@ func (w *WAL) Truncate() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	if w.bufWriter != nil {
+		_ = w.bufWriter.Flush()
+	}
 	if err := w.file.Truncate(0); err != nil {
 		return fmt.Errorf("wal: truncate error: %w", err)
 	}
 	if _, err := w.file.Seek(0, io.SeekStart); err != nil {
 		return fmt.Errorf("wal: seek start error: %w", err)
+	}
+	if w.bufWriter != nil {
+		w.bufWriter.Reset(w.file)
 	}
 	return w.file.Sync()
 }
@@ -173,5 +194,8 @@ func (w *WAL) Truncate() error {
 func (w *WAL) Close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.bufWriter != nil {
+		_ = w.bufWriter.Flush()
+	}
 	return w.file.Close()
 }

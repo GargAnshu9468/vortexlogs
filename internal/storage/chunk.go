@@ -121,7 +121,7 @@ func (c *Chunk) Append(entry *Entry) error {
 	c.rawBytesCount += len(entry.Service) + len(entry.Message) + len(entry.RawJSON) + 24
 
 	// Index Service
-	srvTag := fmt.Sprintf("service=%s", strings.ToLower(entry.Service))
+	srvTag := "service=" + strings.ToLower(entry.Service)
 	if _, ok := c.LabelIndex[srvTag]; !ok {
 		c.LabelIndex[srvTag] = &Bitset{}
 	}
@@ -129,7 +129,7 @@ func (c *Chunk) Append(entry *Entry) error {
 
 	// Index Custom Labels
 	for k, v := range entry.Labels {
-		tag := fmt.Sprintf("%s=%s", strings.ToLower(k), strings.ToLower(v))
+		tag := strings.ToLower(k) + "=" + strings.ToLower(v)
 		if _, ok := c.LabelIndex[tag]; !ok {
 			c.LabelIndex[tag] = &Bitset{}
 		}
@@ -261,7 +261,12 @@ func (c *Chunk) FetchEntries(indexes []int, substringFilter string) []*Entry {
 		messages = c.Messages
 		rawJSONs = c.RawJSONs
 	} else {
-		// Decompress payload block
+		// Target index lookup set for zero-copy skipping
+		needed := make(map[int]struct{}, len(indexes))
+		for _, idx := range indexes {
+			needed[idx] = struct{}{}
+		}
+
 		decoder := decoderPool.Get().(*zstd.Decoder)
 		defer decoderPool.Put(decoder)
 
@@ -279,22 +284,35 @@ func (c *Chunk) FetchEntries(indexes []int, substringFilter string) []*Entry {
 			if err := binary.Read(reader, binary.LittleEndian, &msgLen); err != nil {
 				break
 			}
-			msgBuf := make([]byte, msgLen)
-			if _, err := io.ReadFull(reader, msgBuf); err != nil {
-				break
+			_, want := needed[i]
+			if want || substringFilter != "" {
+				msgBuf := make([]byte, msgLen)
+				if _, err := io.ReadFull(reader, msgBuf); err != nil {
+					break
+				}
+				messages[i] = string(msgBuf)
+			} else {
+				if _, err := reader.Seek(int64(msgLen), io.SeekCurrent); err != nil {
+					break
+				}
 			}
-			messages[i] = string(msgBuf)
 
 			var jsonLen uint32
 			if err := binary.Read(reader, binary.LittleEndian, &jsonLen); err != nil {
 				break
 			}
 			if jsonLen > 0 {
-				jsonBuf := make([]byte, jsonLen)
-				if _, err := io.ReadFull(reader, jsonBuf); err != nil {
-					break
+				if want {
+					jsonBuf := make([]byte, jsonLen)
+					if _, err := io.ReadFull(reader, jsonBuf); err != nil {
+						break
+					}
+					rawJSONs[i] = jsonBuf
+				} else {
+					if _, err := reader.Seek(int64(jsonLen), io.SeekCurrent); err != nil {
+						break
+					}
 				}
-				rawJSONs[i] = jsonBuf
 			}
 		}
 	}
