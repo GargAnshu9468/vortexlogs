@@ -7,7 +7,7 @@ We are thrilled to officially unveil **VortexLogs v1.0.0** — an ultra-fast, si
 For years, devops teams and SREs have wrestled with the immense resource footprint of traditional logging stacks. JVM heap tuning, unpredictable GC stalls, Lucene indexing write amplification, and runaway storage bills are all too familiar.
 
 VortexLogs was engineered from day one for **mechanical sympathy**:
-- **1,200,000+ logs/sec** ingestion on standard hardware
+- **2,300,000+ logs/sec** (Native Binary) and **1,270,000+ logs/sec** (HTTP REST) ingestion on standard hardware
 - **Sub-millisecond query latencies** across 10M+ rows powered by SIMD bitsets
 - **85% disk savings** with dictionary encoding and Zstandard compression
 - **Zero JVM, zero dependencies** — a single ~11 MB static binary

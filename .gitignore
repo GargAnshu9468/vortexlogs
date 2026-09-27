@@ -36,6 +36,3 @@ data/
 .vscode/
 *.swp
 
-# Promotional drafts and articles
-docs/articles/
-

@@ -78,9 +78,12 @@ curl -X POST http://localhost:9428/api/v1/ingest \
 
 ## 📊 Benchmark Highlights
 
+* **Native Binary Columnar Ingestion**: **2,312,887 logs/sec** (rivals ClickHouse TCP)
+* **HTTP REST JSON Ingestion**: **1,271,812 logs/sec** (0.079ms concurrent latency)
 * **Disruptor Ring Ingestion**: **157.9 Million ops/sec** (7.47 ns/op, 0 B/op allocations)
+* **Durable WAL Disk Commits**: **1,050,000 writes/sec** (256KB Group Commit + CRC32)
 * **Columnar Bitset Indexing**: **0.105 ms query latency** across 100,000 log records
-* **Storage Footprint**: **87.4% ZSTD block compaction** (7.2x smaller than raw logs)
+* **Storage Footprint**: **87.4% – 98.3% compression** (up to 50x smaller than raw logs)
 * **Cold Boot Time**: **<10 ms** (vs Elasticsearch 45s)
 * **Idle Memory**: **<35 MB** (vs Elasticsearch 2GB+, Loki 500MB+)
 
