@@ -2,13 +2,16 @@ package server
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/GargAnshu9468/vortexlogs/internal/engine"
+	"github.com/GargAnshu9468/vortexlogs/internal/storage"
 )
 
 func setupTestEngine(t *testing.T) (*engine.Engine, func()) {
@@ -97,5 +100,68 @@ func TestHTTPServerIngestAndQuery(t *testing.T) {
 
 	if wStats.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK on stats, got %d", wStats.Code)
+	}
+}
+
+func TestHTTPServerIngestBinary(t *testing.T) {
+	eng, cleanup := setupTestEngine(t)
+	defer cleanup()
+
+	srv := NewHTTPServer(":0", eng, nil)
+
+	// Build binary frame for 2 records
+	var buf bytes.Buffer
+	// Count = 2
+	var count uint32 = 2
+	_ = binary.Write(&buf, binary.LittleEndian, count)
+
+	// Record 1
+	ts := time.Now().UnixNano()
+	_ = binary.Write(&buf, binary.LittleEndian, ts)
+	_ = buf.WriteByte(byte(storage.LevelError))
+	srv1 := "billing-svc"
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(len(srv1)))
+	buf.WriteString(srv1)
+	msg1 := "Card charge failed due to expired token"
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(len(msg1)))
+	buf.WriteString(msg1)
+
+	// Record 2
+	_ = binary.Write(&buf, binary.LittleEndian, ts+1000)
+	_ = buf.WriteByte(byte(storage.LevelInfo))
+	srv2 := "billing-svc"
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(len(srv2)))
+	buf.WriteString(srv2)
+	msg2 := "Refund issued successfully"
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(len(msg2)))
+	buf.WriteString(msg2)
+
+	req := httptest.NewRequest("POST", "/api/v1/ingest/binary", &buf)
+	w := httptest.NewRecorder()
+	srv.handleIngestBinary(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK on binary ingest, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Verify query returns the binary ingested logs
+	reqQuery := httptest.NewRequest("GET", "/api/v1/query?service=billing-svc&level=ERROR", nil)
+	wQuery := httptest.NewRecorder()
+	srv.handleQuery(wQuery, reqQuery)
+
+	if wQuery.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK on query, got %d: %s", wQuery.Code, wQuery.Body.String())
+	}
+
+	var res engine.QueryResult
+	if err := json.Unmarshal(wQuery.Body.Bytes(), &res); err != nil {
+		t.Fatalf("failed to decode query result: %v", err)
+	}
+
+	if len(res.Entries) != 1 {
+		t.Fatalf("expected 1 error entry, got %d", len(res.Entries))
+	}
+	if res.Entries[0].Message != msg1 {
+		t.Errorf("expected message %q, got %q", msg1, res.Entries[0].Message)
 	}
 }

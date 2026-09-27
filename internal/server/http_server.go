@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -50,6 +51,7 @@ func (s *HTTPServer) ListenAndServe() error {
 		w.Write([]byte(`{"status":"ok","engine":"vortexlogs"}`))
 	})
 	mux.HandleFunc("/api/v1/ingest", s.handleIngest)
+	mux.HandleFunc("/api/v1/ingest/binary", s.handleIngestBinary)
 	mux.HandleFunc("/api/v1/query", s.handleQuery)
 	mux.HandleFunc("/api/v1/stats", s.handleStats)
 	mux.HandleFunc("/api/v1/tail", s.handleTailWebSocket)
@@ -167,10 +169,83 @@ func (s *HTTPServer) handleIngest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
-		"status":   "ok",
-		"ingested": len(entries),
-	})
+	w.Write([]byte(fmt.Sprintf(`{"status":"ok","ingested":%d}`, len(entries))))
+}
+
+// handleIngestBinary processes packed binary TLV log frames for extreme multi-million logs/sec ingestion.
+func (s *HTTPServer) handleIngestBinary(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024*1024))
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	if len(body) < 4 {
+		http.Error(w, "Payload too short", http.StatusBadRequest)
+		return
+	}
+
+	count := binary.LittleEndian.Uint32(body[0:4])
+	if count == 0 || count > 500000 {
+		http.Error(w, "Invalid batch count", http.StatusBadRequest)
+		return
+	}
+
+	entries := make([]*storage.Entry, 0, count)
+	offset := 4
+	now := time.Now().UnixNano()
+
+	for i := uint32(0); i < count && offset < len(body); i++ {
+		// Each record format:
+		// [8 bytes timestamp][1 byte level][2 bytes srvLen][srvLen bytes service][4 bytes msgLen][msgLen bytes msg]
+		if offset+15 > len(body) {
+			break
+		}
+		ts := int64(binary.LittleEndian.Uint64(body[offset : offset+8]))
+		if ts == 0 {
+			ts = now
+		}
+		lvl := storage.Level(body[offset+8])
+		srvLen := int(binary.LittleEndian.Uint16(body[offset+9 : offset+11]))
+		offset += 11
+
+		if offset+srvLen+4 > len(body) {
+			break
+		}
+		srv := string(body[offset : offset+srvLen])
+		offset += srvLen
+
+		msgLen := int(binary.LittleEndian.Uint32(body[offset : offset+4]))
+		offset += 4
+
+		if offset+msgLen > len(body) {
+			break
+		}
+		msg := string(body[offset : offset+msgLen])
+		offset += msgLen
+
+		e := &storage.Entry{
+			Timestamp: ts,
+			Level:     lvl,
+			Service:   srv,
+			Message:   msg,
+		}
+		entries = append(entries, e)
+	}
+
+	if err := s.eng.IngestBatch(entries); err != nil {
+		http.Error(w, "Ingestion failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(fmt.Sprintf(`{"status":"ok","ingested":%d}`, len(entries))))
 }
 
 // handleQuery handles time-range, label-filtered, and regex full-text queries.
